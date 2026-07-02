@@ -1,0 +1,21 @@
+# Action fragment for the audit-log add-on. The host's app.config.yaml
+# $includes this file under `application.runtimeManifest.packages.AuditLog`
+# — so this file should contain ONLY the body of that package definition
+# (license + actions), not the `packages:` wrapper.
+license: Apache-2.0
+actions:
+  system-config-audit-list:
+    function: system-config-audit-list/index.js
+    web: 'yes'
+    runtime: 'nodejs:20'
+    inputs:
+      LOG_LEVEL: debug
+      OAUTH_CLIENT_ID: $OAUTH_CLIENT_ID
+      OAUTH_CLIENT_SECRET: $OAUTH_CLIENT_SECRET
+      OAUTH_ORG_ID: $OAUTH_ORG_ID
+      OAUTH_SCOPES: $OAUTH_SCOPES
+      AIO_DB_REGION: $AIO_DB_REGION
+    annotations:
+      require-adobe-auth: false
+      include-ims-credentials: true
+      final: true
