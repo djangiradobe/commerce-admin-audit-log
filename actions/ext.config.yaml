@@ -19,3 +19,19 @@ actions:
       require-adobe-auth: false
       include-ims-credentials: true
       final: true
+  system-config-audit-delete:
+    function: system-config-audit-delete/index.js
+    web: 'yes'
+    runtime: 'nodejs:20'
+    inputs:
+      LOG_LEVEL: debug
+      OAUTH_CLIENT_ID: $OAUTH_CLIENT_ID
+      OAUTH_CLIENT_SECRET: $OAUTH_CLIENT_SECRET
+      OAUTH_ORG_ID: $OAUTH_ORG_ID
+      OAUTH_SCOPES: $OAUTH_SCOPES
+      AIO_DB_REGION: $AIO_DB_REGION
+      SUPER_ADMIN_EMAILS: $SUPER_ADMIN_EMAILS
+    annotations:
+      require-adobe-auth: false
+      include-ims-credentials: true
+      final: true

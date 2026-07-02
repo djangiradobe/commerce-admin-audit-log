@@ -35,7 +35,8 @@ import {
   Content,
   Header,
   Divider,
-  ButtonGroup
+  ButtonGroup,
+  Checkbox
 } from '@adobe/react-spectrum'
 import { callAction, resolveActor } from '@adobedjangir/commerce-admin-management/web'
 import { getActionKey, getUserRoleProvider } from '@adobedjangir/commerce-admin-management/web'
@@ -135,6 +136,11 @@ export default function AuditLog ({ runtime, ims }) {
   // Confirmation dialog state — null while closed, the row to revert when open.
   const [confirmRow, setConfirmRow] = useState(null)
   const [reverting, setReverting] = useState(false)
+
+  // Delete (single + multi-select) state. Admin-only.
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null) // { ids: [...] } | null
 
   // Filters — kept as draft state; user clicks Search to apply (no live
   // re-fetch on every keystroke since the action is a real HTTP call).
@@ -294,6 +300,46 @@ export default function AuditLog ({ runtime, ims }) {
     setConfirmRow(row)
   }
 
+  // ── Delete (admin-only) ──
+  const rowId = (row) => row._id || `${row.changedAt}-${row.path}`
+  const toggleSelect = (id) => setSelectedIds((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const allVisibleSelected = items.length > 0 && items.every((r) => selectedIds.has(rowId(r)))
+  const toggleSelectAll = () => setSelectedIds((prev) => {
+    if (allVisibleSelected) return new Set()
+    return new Set(items.map(rowId))
+  })
+
+  const runDelete = useCallback(async (ids) => {
+    if (!ids || ids.length === 0) return
+    setDeleting(true)
+    setStatus({ tone: 'notice', message: `Deleting ${ids.length} entr${ids.length === 1 ? 'y' : 'ies'}…` })
+    try {
+      const res = await callAction({ runtime, ims }, getActionKey('systemConfigAuditDelete'), '', { ids })
+      const body = res?.body || res
+      if (body && body.ok) {
+        setStatus({ tone: 'positive', message: `Deleted ${body.deleted} of ${body.requested}` })
+        setSelectedIds(new Set())
+        await fetchPage(0)
+      } else {
+        setStatus({ tone: 'negative', message: (body && body.error) || 'Delete failed' })
+      }
+    } catch (e) {
+      setStatus({ tone: 'negative', message: e.message || 'Delete failed' })
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(null)
+    }
+  }, [runtime, ims, fetchPage])
+
+  // Grid columns — admins get a leading checkbox + wider Actions column.
+  const GRID = canRevert
+    ? '40px minmax(140px, 180px) minmax(120px, 200px) 110px minmax(180px, 1.2fr) minmax(180px, 1.5fr) minmax(180px, 1.5fr) 180px'
+    : 'minmax(140px, 180px) minmax(120px, 200px) 110px minmax(180px, 1.2fr) minmax(180px, 1.5fr) minmax(180px, 1.5fr) 100px'
+
   return (
     <View padding="size-400" UNSAFE_style={{ background: PALETTE.bg, minHeight: '100vh' }}>
       <Heading level={2} marginTop={0}>Audit Log</Heading>
@@ -379,9 +425,22 @@ export default function AuditLog ({ runtime, ims }) {
       >
         <Pagination />
 
+        {/* Bulk-delete bar — admin-only, shown when rows are selected. */}
+        {canRevert && selectedIds.size > 0 && (
+          <View paddingX="size-200" paddingY="size-100" UNSAFE_style={{ background: PALETTE.surfaceMuted, borderBottom: `1px solid ${PALETTE.border}` }}>
+            <Flex gap="size-150" alignItems="center">
+              <Text UNSAFE_style={{ fontSize: 12, fontWeight: 600 }}>{selectedIds.size} selected</Text>
+              <Button variant="negative" onPress={() => setConfirmDelete({ ids: Array.from(selectedIds) })} isDisabled={deleting}>
+                Delete selected
+              </Button>
+              <Button variant="secondary" isQuiet onPress={() => setSelectedIds(new Set())} isDisabled={deleting}>Clear</Button>
+            </Flex>
+          </View>
+        )}
+
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(140px, 180px) minmax(120px, 200px) 110px minmax(180px, 1.2fr) minmax(180px, 1.5fr) minmax(180px, 1.5fr) 100px',
+          gridTemplateColumns: GRID,
           padding: '12px 16px',
           gap: 12,
           background: PALETTE.surfaceMuted,
@@ -392,6 +451,9 @@ export default function AuditLog ({ runtime, ims }) {
           color: PALETTE.textMuted,
           borderBottom: `1px solid ${PALETTE.border}`
         }}>
+          {canRevert && (
+            <div><Checkbox aria-label="Select all" isSelected={allVisibleSelected} onChange={toggleSelectAll} isDisabled={deleting} /></div>
+          )}
           <div>Time</div>
           <div>Actor</div>
           {/* StatusLight's coloured dot takes ~22px before the text, so
@@ -400,7 +462,7 @@ export default function AuditLog ({ runtime, ims }) {
           <div>Path</div>
           <div>Old</div>
           <div>New</div>
-          <div>Revert</div>
+          <div>Actions</div>
         </div>
 
         {loading && items.length === 0 ? (
@@ -430,7 +492,7 @@ export default function AuditLog ({ runtime, ims }) {
                 style={{
                   display: 'grid',
                   // Min/max so columns flex but never collapse below readable.
-                  gridTemplateColumns: 'minmax(140px, 180px) minmax(120px, 200px) 110px minmax(180px, 1.2fr) minmax(180px, 1.5fr) minmax(180px, 1.5fr) 100px',
+                  gridTemplateColumns: GRID,
                   padding: '12px 16px',
                   gap: 12,
                   borderBottom: `1px solid ${PALETTE.border}`,
@@ -440,6 +502,9 @@ export default function AuditLog ({ runtime, ims }) {
                   alignItems: 'start'
                 }}
               >
+                {canRevert && (
+                  <div><Checkbox aria-label="Select row" isSelected={selectedIds.has(rowId(row))} onChange={() => toggleSelect(rowId(row))} isDisabled={deleting} /></div>
+                )}
                 <div style={{ ...cell, color: PALETTE.text }}>{fmtTime(row.changedAt)}</div>
                 <div style={{ ...cell, color: PALETTE.textMuted }}>
                   {row.changedBy || 'system'}
@@ -460,14 +525,27 @@ export default function AuditLog ({ runtime, ims }) {
                   {fmtValue(row.newValue)}
                 </div>
                 <div>
-                  <Button
-                    variant="secondary"
-                    onPress={() => startRevert(row)}
-                    isDisabled={reverting || isEncrypted || !canRevert}
-                    UNSAFE_style={{ fontFamily: 'inherit' }}
-                  >
-                    {isEncrypted ? 'N/A' : (!canRevert ? 'Admin only' : 'Revert')}
-                  </Button>
+                  <Flex gap="size-100" wrap>
+                    <Button
+                      variant="secondary"
+                      onPress={() => startRevert(row)}
+                      isDisabled={reverting || isEncrypted || !canRevert}
+                      UNSAFE_style={{ fontFamily: 'inherit' }}
+                    >
+                      {isEncrypted ? 'N/A' : (!canRevert ? 'Admin only' : 'Revert')}
+                    </Button>
+                    {canRevert && (
+                      <Button
+                        variant="negative"
+                        isQuiet
+                        onPress={() => setConfirmDelete({ ids: [rowId(row)] })}
+                        isDisabled={deleting}
+                        UNSAFE_style={{ fontFamily: 'inherit' }}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </Flex>
                 </div>
               </div>
             )
@@ -475,6 +553,27 @@ export default function AuditLog ({ runtime, ims }) {
         )}
 
       </View>
+
+      {/* Delete confirmation dialog (single or selected). */}
+      <DialogTrigger isOpen={!!confirmDelete} onOpenChange={(o) => { if (!o) setConfirmDelete(null) }}>
+        <div style={{ display: 'none' }} aria-hidden="true">trigger</div>
+        <Dialog>
+          <Heading>Delete audit {confirmDelete && confirmDelete.ids.length === 1 ? 'entry' : 'entries'}?</Heading>
+          <Divider />
+          <Content>
+            <Text>
+              Permanently delete <strong>{confirmDelete ? confirmDelete.ids.length : 0}</strong> audit
+              {confirmDelete && confirmDelete.ids.length === 1 ? ' entry' : ' entries'}? This can't be undone.
+            </Text>
+          </Content>
+          <ButtonGroup>
+            <Button variant="secondary" onPress={() => setConfirmDelete(null)} isDisabled={deleting}>Cancel</Button>
+            <Button variant="negative" onPress={() => runDelete(confirmDelete.ids)} isDisabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </ButtonGroup>
+        </Dialog>
+      </DialogTrigger>
 
       {/* Revert confirmation dialog. */}
       <DialogTrigger isOpen={!!confirmRow} onOpenChange={(o) => { if (!o) setConfirmRow(null) }}>

@@ -20,7 +20,8 @@ import AuditLog from './AuditLog'
 export default function registerAuditLog () {
   configureWeb({
     actionKeys: {
-      systemConfigAuditList: 'AuditLog/system-config-audit-list'
+      systemConfigAuditList: 'AuditLog/system-config-audit-list',
+      systemConfigAuditDelete: 'AuditLog/system-config-audit-delete'
     },
     extraNav: [{
       id: 'audit-log',

@@ -49,6 +49,14 @@ async function recordAuditEntries (client, entries, logger) {
     await ensureCollection(client, AUDIT_COLLECTION)
     const col = await client.collection(AUDIT_COLLECTION)
     await ensureAuditIndexes(col, log)
+    // Assign an explicit string _id so entries can be deleted reliably later
+    // (a driver-assigned ObjectId serialises to a hex string the UI can't
+    // round-trip into a delete filter). Idempotent — keep any _id already set.
+    for (const e of entries) {
+      if (e && !e._id) {
+        e._id = `audit_${String(e.changedAt || Date.now()).replace(/[:.]/g, '-')}_${Math.random().toString(36).slice(2, 8)}`
+      }
+    }
     // Prefer a single insertMany, but fall back to per-document insertOne on
     // ANY failure — some ABDB driver versions either don't implement
     // insertMany or reject the batch with a message we can't reliably match.

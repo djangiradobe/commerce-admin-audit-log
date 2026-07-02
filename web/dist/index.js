@@ -21,7 +21,8 @@ import {
   Content,
   Header,
   Divider,
-  ButtonGroup
+  ButtonGroup,
+  Checkbox
 } from "@adobe/react-spectrum";
 import { callAction, resolveActor } from "@adobedjangir/commerce-admin-management/web";
 import { getActionKey, getUserRoleProvider } from "@adobedjangir/commerce-admin-management/web";
@@ -113,6 +114,9 @@ function AuditLog({ runtime, ims }) {
   const [status, setStatus] = useState({ tone: "neutral", message: "" });
   const [confirmRow, setConfirmRow] = useState(null);
   const [reverting, setReverting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => /* @__PURE__ */ new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const [scope, setScope] = useState("any");
   const [actionFilter, setActionFilter] = useState("any");
   const [pathFilter, setPathFilter] = useState("");
@@ -249,6 +253,40 @@ function AuditLog({ runtime, ims }) {
     setStatus({ tone: "neutral", message: "" });
     setConfirmRow(row);
   };
+  const rowId = (row) => row._id || `${row.changedAt}-${row.path}`;
+  const toggleSelect = (id) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+  const allVisibleSelected = items.length > 0 && items.every((r) => selectedIds.has(rowId(r)));
+  const toggleSelectAll = () => setSelectedIds((prev) => {
+    if (allVisibleSelected) return /* @__PURE__ */ new Set();
+    return new Set(items.map(rowId));
+  });
+  const runDelete = useCallback(async (ids) => {
+    if (!ids || ids.length === 0) return;
+    setDeleting(true);
+    setStatus({ tone: "notice", message: `Deleting ${ids.length} entr${ids.length === 1 ? "y" : "ies"}\u2026` });
+    try {
+      const res = await callAction({ runtime, ims }, getActionKey("systemConfigAuditDelete"), "", { ids });
+      const body = (res == null ? void 0 : res.body) || res;
+      if (body && body.ok) {
+        setStatus({ tone: "positive", message: `Deleted ${body.deleted} of ${body.requested}` });
+        setSelectedIds(/* @__PURE__ */ new Set());
+        await fetchPage(0);
+      } else {
+        setStatus({ tone: "negative", message: body && body.error || "Delete failed" });
+      }
+    } catch (e) {
+      setStatus({ tone: "negative", message: e.message || "Delete failed" });
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(null);
+    }
+  }, [runtime, ims, fetchPage]);
+  const GRID = canRevert ? "40px minmax(140px, 180px) minmax(120px, 200px) 110px minmax(180px, 1.2fr) minmax(180px, 1.5fr) minmax(180px, 1.5fr) 180px" : "minmax(140px, 180px) minmax(120px, 200px) 110px minmax(180px, 1.2fr) minmax(180px, 1.5fr) minmax(180px, 1.5fr) 100px";
   return /* @__PURE__ */ jsxs(View, { padding: "size-400", UNSAFE_style: { background: PALETTE.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ jsx(Heading, { level: 2, marginTop: 0, children: "Audit Log" }),
     /* @__PURE__ */ jsxs(Text, { UNSAFE_style: { color: PALETTE.textMuted }, children: [
@@ -330,9 +368,17 @@ function AuditLog({ runtime, ims }) {
         },
         children: [
           /* @__PURE__ */ jsx(Pagination, {}),
+          canRevert && selectedIds.size > 0 && /* @__PURE__ */ jsx(View, { paddingX: "size-200", paddingY: "size-100", UNSAFE_style: { background: PALETTE.surfaceMuted, borderBottom: `1px solid ${PALETTE.border}` }, children: /* @__PURE__ */ jsxs(Flex, { gap: "size-150", alignItems: "center", children: [
+            /* @__PURE__ */ jsxs(Text, { UNSAFE_style: { fontSize: 12, fontWeight: 600 }, children: [
+              selectedIds.size,
+              " selected"
+            ] }),
+            /* @__PURE__ */ jsx(Button, { variant: "negative", onPress: () => setConfirmDelete({ ids: Array.from(selectedIds) }), isDisabled: deleting, children: "Delete selected" }),
+            /* @__PURE__ */ jsx(Button, { variant: "secondary", isQuiet: true, onPress: () => setSelectedIds(/* @__PURE__ */ new Set()), isDisabled: deleting, children: "Clear" })
+          ] }) }),
           /* @__PURE__ */ jsxs("div", { style: {
             display: "grid",
-            gridTemplateColumns: "minmax(140px, 180px) minmax(120px, 200px) 110px minmax(180px, 1.2fr) minmax(180px, 1.5fr) minmax(180px, 1.5fr) 100px",
+            gridTemplateColumns: GRID,
             padding: "12px 16px",
             gap: 12,
             background: PALETTE.surfaceMuted,
@@ -343,13 +389,14 @@ function AuditLog({ runtime, ims }) {
             color: PALETTE.textMuted,
             borderBottom: `1px solid ${PALETTE.border}`
           }, children: [
+            canRevert && /* @__PURE__ */ jsx("div", { children: /* @__PURE__ */ jsx(Checkbox, { "aria-label": "Select all", isSelected: allVisibleSelected, onChange: toggleSelectAll, isDisabled: deleting }) }),
             /* @__PURE__ */ jsx("div", { children: "Time" }),
             /* @__PURE__ */ jsx("div", { children: "Actor" }),
             /* @__PURE__ */ jsx("div", { style: { paddingLeft: 22 }, children: "Action" }),
             /* @__PURE__ */ jsx("div", { children: "Path" }),
             /* @__PURE__ */ jsx("div", { children: "Old" }),
             /* @__PURE__ */ jsx("div", { children: "New" }),
-            /* @__PURE__ */ jsx("div", { children: "Revert" })
+            /* @__PURE__ */ jsx("div", { children: "Actions" })
           ] }),
           loading && items.length === 0 ? /* @__PURE__ */ jsx(Flex, { justifyContent: "center", margin: "size-400", children: /* @__PURE__ */ jsx(ProgressCircle, { "aria-label": "Loading", isIndeterminate: true }) }) : items.length === 0 ? /* @__PURE__ */ jsx(View, { padding: "size-400", children: /* @__PURE__ */ jsx(Text, { UNSAFE_style: { color: PALETTE.textMuted }, children: "No audit entries match these filters." }) }) : items.map((row, i) => {
             const isEncrypted = row.oldValue === SENSITIVE_TOKEN || row.newValue === SENSITIVE_TOKEN;
@@ -365,7 +412,7 @@ function AuditLog({ runtime, ims }) {
                 style: {
                   display: "grid",
                   // Min/max so columns flex but never collapse below readable.
-                  gridTemplateColumns: "minmax(140px, 180px) minmax(120px, 200px) 110px minmax(180px, 1.2fr) minmax(180px, 1.5fr) minmax(180px, 1.5fr) 100px",
+                  gridTemplateColumns: GRID,
                   padding: "12px 16px",
                   gap: 12,
                   borderBottom: `1px solid ${PALETTE.border}`,
@@ -375,6 +422,7 @@ function AuditLog({ runtime, ims }) {
                   alignItems: "start"
                 },
                 children: [
+                  canRevert && /* @__PURE__ */ jsx("div", { children: /* @__PURE__ */ jsx(Checkbox, { "aria-label": "Select row", isSelected: selectedIds.has(rowId(row)), onChange: () => toggleSelect(rowId(row)), isDisabled: deleting }) }),
                   /* @__PURE__ */ jsx("div", { style: { ...cell, color: PALETTE.text }, children: fmtTime(row.changedAt) }),
                   /* @__PURE__ */ jsx("div", { style: { ...cell, color: PALETTE.textMuted }, children: row.changedBy || "system" }),
                   /* @__PURE__ */ jsx("div", { children: /* @__PURE__ */ jsx(StatusLight, { variant: actionTone(row.action), children: row.action || "?" }) }),
@@ -388,16 +436,29 @@ function AuditLog({ runtime, ims }) {
                   ] }),
                   /* @__PURE__ */ jsx("div", { style: { ...cell, color: PALETTE.danger }, children: fmtValue(row.oldValue) }),
                   /* @__PURE__ */ jsx("div", { style: { ...cell, color: PALETTE.success }, children: fmtValue(row.newValue) }),
-                  /* @__PURE__ */ jsx("div", { children: /* @__PURE__ */ jsx(
-                    Button,
-                    {
-                      variant: "secondary",
-                      onPress: () => startRevert(row),
-                      isDisabled: reverting || isEncrypted || !canRevert,
-                      UNSAFE_style: { fontFamily: "inherit" },
-                      children: isEncrypted ? "N/A" : !canRevert ? "Admin only" : "Revert"
-                    }
-                  ) })
+                  /* @__PURE__ */ jsx("div", { children: /* @__PURE__ */ jsxs(Flex, { gap: "size-100", wrap: true, children: [
+                    /* @__PURE__ */ jsx(
+                      Button,
+                      {
+                        variant: "secondary",
+                        onPress: () => startRevert(row),
+                        isDisabled: reverting || isEncrypted || !canRevert,
+                        UNSAFE_style: { fontFamily: "inherit" },
+                        children: isEncrypted ? "N/A" : !canRevert ? "Admin only" : "Revert"
+                      }
+                    ),
+                    canRevert && /* @__PURE__ */ jsx(
+                      Button,
+                      {
+                        variant: "negative",
+                        isQuiet: true,
+                        onPress: () => setConfirmDelete({ ids: [rowId(row)] }),
+                        isDisabled: deleting,
+                        UNSAFE_style: { fontFamily: "inherit" },
+                        children: "Delete"
+                      }
+                    )
+                  ] }) })
                 ]
               },
               row._id || `${row.changedAt}-${row.path}-${i}`
@@ -406,6 +467,30 @@ function AuditLog({ runtime, ims }) {
         ]
       }
     ),
+    /* @__PURE__ */ jsxs(DialogTrigger, { isOpen: !!confirmDelete, onOpenChange: (o) => {
+      if (!o) setConfirmDelete(null);
+    }, children: [
+      /* @__PURE__ */ jsx("div", { style: { display: "none" }, "aria-hidden": "true", children: "trigger" }),
+      /* @__PURE__ */ jsxs(Dialog, { children: [
+        /* @__PURE__ */ jsxs(Heading, { children: [
+          "Delete audit ",
+          confirmDelete && confirmDelete.ids.length === 1 ? "entry" : "entries",
+          "?"
+        ] }),
+        /* @__PURE__ */ jsx(Divider, {}),
+        /* @__PURE__ */ jsx(Content, { children: /* @__PURE__ */ jsxs(Text, { children: [
+          "Permanently delete ",
+          /* @__PURE__ */ jsx("strong", { children: confirmDelete ? confirmDelete.ids.length : 0 }),
+          " audit",
+          confirmDelete && confirmDelete.ids.length === 1 ? " entry" : " entries",
+          "? This can't be undone."
+        ] }) }),
+        /* @__PURE__ */ jsxs(ButtonGroup, { children: [
+          /* @__PURE__ */ jsx(Button, { variant: "secondary", onPress: () => setConfirmDelete(null), isDisabled: deleting, children: "Cancel" }),
+          /* @__PURE__ */ jsx(Button, { variant: "negative", onPress: () => runDelete(confirmDelete.ids), isDisabled: deleting, children: deleting ? "Deleting\u2026" : "Delete" })
+        ] })
+      ] })
+    ] }),
     /* @__PURE__ */ jsxs(DialogTrigger, { isOpen: !!confirmRow, onOpenChange: (o) => {
       if (!o) setConfirmRow(null);
     }, children: [
@@ -457,7 +542,8 @@ function AuditLog({ runtime, ims }) {
 function registerAuditLog() {
   configureWeb({
     actionKeys: {
-      systemConfigAuditList: "AuditLog/system-config-audit-list"
+      systemConfigAuditList: "AuditLog/system-config-audit-list",
+      systemConfigAuditDelete: "AuditLog/system-config-audit-delete"
     },
     extraNav: [{
       id: "audit-log",
