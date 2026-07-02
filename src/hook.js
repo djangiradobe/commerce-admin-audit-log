@@ -19,6 +19,22 @@ async function ensureCollection (client, name) {
   }
 }
 
+// Create the indexes the audit-list query + compaction rely on (sort by
+// changedAt, and the common scope-filtered view). Guarded by a per-cold-start
+// flag so we don't pay a round-trip on every write; createIndex is idempotent
+// (a no-op if the index already exists). Best-effort — never throws.
+let auditIndexesEnsured = false
+async function ensureAuditIndexes (col, log) {
+  if (auditIndexesEnsured) return
+  try {
+    await col.createIndex({ changedAt: -1 })
+    await col.createIndex({ scope: 1, changedAt: -1 })
+    auditIndexesEnsured = true
+  } catch (err) {
+    if (log && log.info) log.info(`audit-log hook: index ensure skipped (${err && err.message})`)
+  }
+}
+
 /**
  * Append a batch of audit entries. Best-effort; never throws.
  *
@@ -32,6 +48,7 @@ async function recordAuditEntries (client, entries, logger) {
   try {
     await ensureCollection(client, AUDIT_COLLECTION)
     const col = await client.collection(AUDIT_COLLECTION)
+    await ensureAuditIndexes(col, log)
     // Prefer a single insertMany, but fall back to per-document insertOne on
     // ANY failure — some ABDB driver versions either don't implement
     // insertMany or reject the batch with a message we can't reliably match.

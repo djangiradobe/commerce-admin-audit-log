@@ -16,6 +16,9 @@ const COLLECTION = 'system_config_audit'
 const DEFAULT_LIMIT = 100
 const MAX_LIMIT = 500
 
+// Per-cold-start guard so we createIndex at most once per container.
+let indexesEnsured = false
+
 function buildFilter (params) {
   const f = {}
   if (params.scope) f.scope = String(params.scope)
@@ -61,8 +64,15 @@ async function main (params) {
       if (!/exist|already|duplicate/i.test(m)) logger.warn(`ensureCollection: ${m}`)
     }
     const col = await client.collection(COLLECTION)
-    // Newest first. Without an index ABDB will scan, but the cap on audit
-    // doc count keeps this bounded.
+    // Ensure the sort/filter indexes exist (idempotent; once per cold start).
+    if (!indexesEnsured) {
+      try {
+        await col.createIndex({ changedAt: -1 })
+        await col.createIndex({ scope: 1, changedAt: -1 })
+        indexesEnsured = true
+      } catch (_) { /* best-effort */ }
+    }
+    // Newest first — backed by the { changedAt: -1 } index.
     let cursor = col.find(filter).sort({ changedAt: -1 })
     if (!pathFilter) {
       cursor = cursor.skip(skip).limit(limit)
