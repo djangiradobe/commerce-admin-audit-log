@@ -9,6 +9,8 @@ Licensed under the Apache License, Version 2.0
 
 const AUDIT_COLLECTION = 'system_config_audit'
 const AUDIT_MAX_DOCS = 10000
+// Run the size-check/compaction on roughly 1 in N writes (not every write).
+const COMPACT_EVERY = 20
 
 async function ensureCollection (client, name) {
   try {
@@ -77,15 +79,19 @@ async function recordAuditEntries (client, entries, logger) {
       }
     }
     log.info(`audit-log hook: recorded ${inserted}/${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} into ${AUDIT_COLLECTION}`)
-    // Best-effort cap.
-    try {
-      const total = await col.countDocuments({})
-      if (total > AUDIT_MAX_DOCS) {
-        const over = total - AUDIT_MAX_DOCS
-        const oldest = await col.find({}).sort({ changedAt: 1 }).limit(over).toArray()
-        for (const o of oldest) await col.deleteOne({ _id: o._id })
-      }
-    } catch (_) { /* compaction is best-effort */ }
+    // Best-effort cap — throttled so we don't count on every write. Only ~1 in
+    // COMPACT_EVERY writes checks the size, and uses estimatedDocumentCount
+    // (metadata-based, O(1)) instead of countDocuments (a full scan).
+    if (Math.random() < 1 / COMPACT_EVERY) {
+      try {
+        const total = await (col.estimatedDocumentCount ? col.estimatedDocumentCount() : col.countDocuments({}))
+        if (total > AUDIT_MAX_DOCS) {
+          const over = total - AUDIT_MAX_DOCS
+          const oldest = await col.find({}, { projection: { _id: 1 } }).sort({ changedAt: 1 }).limit(over).toArray()
+          for (const o of oldest) await col.deleteOne({ _id: o._id })
+        }
+      } catch (_) { /* compaction is best-effort */ }
+    }
   } catch (err) {
     log.warn(`audit-log hook: write failed (${err.message})`)
   }
