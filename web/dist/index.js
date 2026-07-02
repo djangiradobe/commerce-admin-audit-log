@@ -265,12 +265,19 @@ function AuditLog({ runtime, ims }) {
     if (allVisibleSelected) return /* @__PURE__ */ new Set();
     return new Set(items.map(rowId));
   });
-  const runDelete = useCallback(async (ids) => {
-    if (!ids || ids.length === 0) return;
+  const runDelete = useCallback(async (rows) => {
+    if (!rows || rows.length === 0) return;
     setDeleting(true);
-    setStatus({ tone: "notice", message: `Deleting ${ids.length} entr${ids.length === 1 ? "y" : "ies"}\u2026` });
+    setStatus({ tone: "notice", message: `Deleting ${rows.length} entr${rows.length === 1 ? "y" : "ies"}\u2026` });
     try {
-      const res = await callAction({ runtime, ims }, getActionKey("systemConfigAuditDelete"), "", { ids });
+      const keys = rows.map((r) => ({
+        changedAt: r.changedAt,
+        path: r.path,
+        scope: r.scope,
+        scope_id: r.scope_id,
+        action: r.action
+      }));
+      const res = await callAction({ runtime, ims }, getActionKey("systemConfigAuditDelete"), "", { keys });
       const body = (res == null ? void 0 : res.body) || res;
       if (body && body.ok) {
         setStatus({ tone: "positive", message: `Deleted ${body.deleted} of ${body.requested}` });
@@ -373,7 +380,7 @@ function AuditLog({ runtime, ims }) {
               selectedIds.size,
               " selected"
             ] }),
-            /* @__PURE__ */ jsx(Button, { variant: "negative", onPress: () => setConfirmDelete({ ids: Array.from(selectedIds) }), isDisabled: deleting, children: "Delete selected" }),
+            /* @__PURE__ */ jsx(Button, { variant: "negative", onPress: () => setConfirmDelete({ rows: items.filter((r) => selectedIds.has(rowId(r))) }), isDisabled: deleting, children: "Delete selected" }),
             /* @__PURE__ */ jsx(Button, { variant: "secondary", isQuiet: true, onPress: () => setSelectedIds(/* @__PURE__ */ new Set()), isDisabled: deleting, children: "Clear" })
           ] }) }),
           /* @__PURE__ */ jsxs("div", { style: {
@@ -452,7 +459,7 @@ function AuditLog({ runtime, ims }) {
                       {
                         variant: "negative",
                         isQuiet: true,
-                        onPress: () => setConfirmDelete({ ids: [rowId(row)] }),
+                        onPress: () => setConfirmDelete({ rows: [row] }),
                         isDisabled: deleting,
                         UNSAFE_style: { fontFamily: "inherit" },
                         children: "Delete"
@@ -474,20 +481,20 @@ function AuditLog({ runtime, ims }) {
       /* @__PURE__ */ jsxs(Dialog, { children: [
         /* @__PURE__ */ jsxs(Heading, { children: [
           "Delete audit ",
-          confirmDelete && confirmDelete.ids.length === 1 ? "entry" : "entries",
+          confirmDelete && confirmDelete.rows.length === 1 ? "entry" : "entries",
           "?"
         ] }),
         /* @__PURE__ */ jsx(Divider, {}),
         /* @__PURE__ */ jsx(Content, { children: /* @__PURE__ */ jsxs(Text, { children: [
           "Permanently delete ",
-          /* @__PURE__ */ jsx("strong", { children: confirmDelete ? confirmDelete.ids.length : 0 }),
+          /* @__PURE__ */ jsx("strong", { children: confirmDelete ? confirmDelete.rows.length : 0 }),
           " audit",
-          confirmDelete && confirmDelete.ids.length === 1 ? " entry" : " entries",
+          confirmDelete && confirmDelete.rows.length === 1 ? " entry" : " entries",
           "? This can't be undone."
         ] }) }),
         /* @__PURE__ */ jsxs(ButtonGroup, { children: [
           /* @__PURE__ */ jsx(Button, { variant: "secondary", onPress: () => setConfirmDelete(null), isDisabled: deleting, children: "Cancel" }),
-          /* @__PURE__ */ jsx(Button, { variant: "negative", onPress: () => runDelete(confirmDelete.ids), isDisabled: deleting, children: deleting ? "Deleting\u2026" : "Delete" })
+          /* @__PURE__ */ jsx(Button, { variant: "negative", onPress: () => runDelete(confirmDelete.rows), isDisabled: deleting, children: deleting ? "Deleting\u2026" : "Delete" })
         ] })
       ] })
     ] }),

@@ -24,6 +24,26 @@ function normalizeIds (params) {
   return []
 }
 
+// Composite keys identify an entry by its content, not its _id. This is the
+// reliable path: entries written before explicit string _ids carry a
+// driver-assigned ObjectId that a hex string won't match in an _id filter.
+// A (changedAt, path, scope, scope_id, action) tuple uniquely identifies an
+// entry (a given path is recorded once per scope per save timestamp).
+function normalizeKeys (params) {
+  if (!Array.isArray(params.keys)) return []
+  return params.keys
+    .filter((k) => k && (k.changedAt || k.path))
+    .map((k) => {
+      const f = {}
+      if (k.changedAt != null) f.changedAt = String(k.changedAt)
+      if (k.path != null) f.path = String(k.path)
+      if (k.scope != null) f.scope = String(k.scope)
+      if (k.scope_id != null) f.scope_id = String(k.scope_id)
+      if (k.action != null) f.action = String(k.action)
+      return f
+    })
+}
+
 async function main (params) {
   const logger = Core.Logger('system-config-audit-delete', { level: params.LOG_LEVEL || 'info' })
 
@@ -34,7 +54,9 @@ async function main (params) {
   }
 
   const ids = normalizeIds(params)
-  if (ids.length === 0) return { statusCode: 400, body: { ok: false, error: 'Provide id or ids to delete.' } }
+  const keys = normalizeKeys(params)
+  const requested = keys.length || ids.length
+  if (requested === 0) return { statusCode: 400, body: { ok: false, error: 'Provide keys (or ids) to delete.' } }
 
   let handle
   try { handle = await getClient(params) } catch (e) {
@@ -44,16 +66,21 @@ async function main (params) {
   try {
     const col = await client.collection(COLLECTION)
     let deleted = 0
-    try {
-      const res = await col.deleteMany({ _id: { $in: ids } })
-      deleted = (res && (res.deletedCount ?? res.deleted)) || 0
-    } catch (_) {
-      // Fallback for drivers without deleteMany: per-id deleteOne.
-      for (const id of ids) {
-        try { const r = await col.deleteOne({ _id: id }); deleted += (r && (r.deletedCount ?? r.deleted)) || 0 } catch (_) {}
+    const countOf = (r) => (r && (r.deletedCount ?? r.deleted)) || 0
+
+    // Preferred: content-key delete (works regardless of _id type).
+    for (const key of keys) {
+      try { deleted += countOf(await col.deleteMany(key)) } catch (_) {
+        try { deleted += countOf(await col.deleteOne(key)) } catch (_) {}
       }
     }
-    return { statusCode: 200, body: { ok: true, requested: ids.length, deleted } }
+    // Fallback: string-_id delete (new entries carry explicit string _ids).
+    if (keys.length === 0 && ids.length) {
+      try { deleted += countOf(await col.deleteMany({ _id: { $in: ids } })) } catch (_) {
+        for (const id of ids) { try { deleted += countOf(await col.deleteOne({ _id: id })) } catch (_) {} }
+      }
+    }
+    return { statusCode: 200, body: { ok: true, requested, deleted } }
   } catch (error) {
     logger.error(error)
     return errorResponse(500, error.message || 'audit delete failed', logger)

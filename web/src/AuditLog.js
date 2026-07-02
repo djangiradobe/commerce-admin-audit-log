@@ -313,12 +313,17 @@ export default function AuditLog ({ runtime, ims }) {
     return new Set(items.map(rowId))
   })
 
-  const runDelete = useCallback(async (ids) => {
-    if (!ids || ids.length === 0) return
+  const runDelete = useCallback(async (rows) => {
+    if (!rows || rows.length === 0) return
     setDeleting(true)
-    setStatus({ tone: 'notice', message: `Deleting ${ids.length} entr${ids.length === 1 ? 'y' : 'ies'}…` })
+    setStatus({ tone: 'notice', message: `Deleting ${rows.length} entr${rows.length === 1 ? 'y' : 'ies'}…` })
     try {
-      const res = await callAction({ runtime, ims }, getActionKey('systemConfigAuditDelete'), '', { ids })
+      // Delete by content key (changedAt/path/scope/…) — reliable regardless of
+      // whether the entry has a string _id or a legacy ObjectId.
+      const keys = rows.map((r) => ({
+        changedAt: r.changedAt, path: r.path, scope: r.scope, scope_id: r.scope_id, action: r.action
+      }))
+      const res = await callAction({ runtime, ims }, getActionKey('systemConfigAuditDelete'), '', { keys })
       const body = res?.body || res
       if (body && body.ok) {
         setStatus({ tone: 'positive', message: `Deleted ${body.deleted} of ${body.requested}` })
@@ -430,7 +435,7 @@ export default function AuditLog ({ runtime, ims }) {
           <View paddingX="size-200" paddingY="size-100" UNSAFE_style={{ background: PALETTE.surfaceMuted, borderBottom: `1px solid ${PALETTE.border}` }}>
             <Flex gap="size-150" alignItems="center">
               <Text UNSAFE_style={{ fontSize: 12, fontWeight: 600 }}>{selectedIds.size} selected</Text>
-              <Button variant="negative" onPress={() => setConfirmDelete({ ids: Array.from(selectedIds) })} isDisabled={deleting}>
+              <Button variant="negative" onPress={() => setConfirmDelete({ rows: items.filter((r) => selectedIds.has(rowId(r))) })} isDisabled={deleting}>
                 Delete selected
               </Button>
               <Button variant="secondary" isQuiet onPress={() => setSelectedIds(new Set())} isDisabled={deleting}>Clear</Button>
@@ -538,7 +543,7 @@ export default function AuditLog ({ runtime, ims }) {
                       <Button
                         variant="negative"
                         isQuiet
-                        onPress={() => setConfirmDelete({ ids: [rowId(row)] })}
+                        onPress={() => setConfirmDelete({ rows: [row] })}
                         isDisabled={deleting}
                         UNSAFE_style={{ fontFamily: 'inherit' }}
                       >
@@ -558,17 +563,17 @@ export default function AuditLog ({ runtime, ims }) {
       <DialogTrigger isOpen={!!confirmDelete} onOpenChange={(o) => { if (!o) setConfirmDelete(null) }}>
         <div style={{ display: 'none' }} aria-hidden="true">trigger</div>
         <Dialog>
-          <Heading>Delete audit {confirmDelete && confirmDelete.ids.length === 1 ? 'entry' : 'entries'}?</Heading>
+          <Heading>Delete audit {confirmDelete && confirmDelete.rows.length === 1 ? 'entry' : 'entries'}?</Heading>
           <Divider />
           <Content>
             <Text>
-              Permanently delete <strong>{confirmDelete ? confirmDelete.ids.length : 0}</strong> audit
-              {confirmDelete && confirmDelete.ids.length === 1 ? ' entry' : ' entries'}? This can't be undone.
+              Permanently delete <strong>{confirmDelete ? confirmDelete.rows.length : 0}</strong> audit
+              {confirmDelete && confirmDelete.rows.length === 1 ? ' entry' : ' entries'}? This can't be undone.
             </Text>
           </Content>
           <ButtonGroup>
             <Button variant="secondary" onPress={() => setConfirmDelete(null)} isDisabled={deleting}>Cancel</Button>
-            <Button variant="negative" onPress={() => runDelete(confirmDelete.ids)} isDisabled={deleting}>
+            <Button variant="negative" onPress={() => runDelete(confirmDelete.rows)} isDisabled={deleting}>
               {deleting ? 'Deleting…' : 'Delete'}
             </Button>
           </ButtonGroup>
