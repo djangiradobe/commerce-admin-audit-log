@@ -1,6 +1,6 @@
 {
   "name": "@adobedjangir/commerce-admin-audit-log",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Audit log + revert add-on for @adobedjangir/commerce-admin-management. Records every system_config change with old/new/actor and exposes a UI tab to inspect + revert.",
   "license": "Apache-2.0",
   "author": "Adobe Inc.",

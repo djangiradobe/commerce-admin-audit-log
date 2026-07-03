@@ -8,6 +8,9 @@ actions:
     function: system-config-audit-list/index.js
     web: 'yes'
     runtime: 'nodejs:20'
+    limits:
+      concurrency: 200
+      memory: 256
     inputs:
       LOG_LEVEL: debug
       OAUTH_CLIENT_ID: $OAUTH_CLIENT_ID
@@ -23,6 +26,9 @@ actions:
     function: system-config-audit-delete/index.js
     web: 'yes'
     runtime: 'nodejs:20'
+    limits:
+      concurrency: 200
+      memory: 256
     inputs:
       LOG_LEVEL: debug
       OAUTH_CLIENT_ID: $OAUTH_CLIENT_ID

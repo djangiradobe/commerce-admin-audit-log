@@ -26,7 +26,7 @@ Each entry captures: `scope`, `scope_id`, `path`, `action` (create/update/delete
 - **Revert** an entry to roll a value back (create → deletes the override;
   update/delete → writes the previous value back).
 
-> **Revert is admin-only** when the
+> **Revert and delete are admin-only** (delete supports single + multi-select) when the
 > [`ims-access`](https://www.npmjs.com/package/@adobedjangir/commerce-admin-ims-access)
 > RBAC add-on is installed. Without RBAC, revert is open.
 
