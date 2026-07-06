@@ -1,6 +1,6 @@
 {
   "name": "@adobedjangir/commerce-admin-audit-log",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Audit log + revert add-on for @adobedjangir/commerce-admin-management. Records every system_config change with old/new/actor and exposes a UI tab to inspect + revert.",
   "license": "Apache-2.0",
   "author": "Adobe Inc.",
@@ -18,22 +18,29 @@
     "./web": "./web/index.js"
   },
   "scripts": {
-    "build": "node ./scripts/build-web.js",
-    "prepublishOnly": "node ./scripts/build-web.js",
-    "postinstall": "node ./scripts/setup.js && node -e \"try{require('@adobedjangir/commerce-admin-management/scripts/discover').run()}catch(e){}\""
+    "build": "tsc -p tsconfig.json && node ./scripts/build-web.js",
+    "prepare": "npm run build",
+    "postinstall": "node -e \"const cp=require('child_process'),fs=require('fs');if(fs.existsSync('./scripts/setup.js'))cp.spawnSync(process.execPath,['./scripts/setup.js'],{stdio:'inherit'});try{require('@adobedjangir/commerce-admin-management/scripts/discover').run()}catch(e){}\""
   },
   "files": [
     "src",
     "actions",
     "web",
     "scripts",
-    "README.md"
+    "README.md",
+    "!**/*.ts",
+    "!**/*.tsx",
+    "!tsconfig.json"
   ],
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "esbuild": "^0.25.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.0.0"
   },
   "peerDependencies": {
     "@adobedjangir/commerce-admin-management": ">=1.0.0",

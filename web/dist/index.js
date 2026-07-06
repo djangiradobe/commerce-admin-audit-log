@@ -1,8 +1,8 @@
-// web/src/index.js
+// web/src/index.tsx
 import { configureWeb } from "@adobedjangir/commerce-admin-management/web";
 
-// web/src/AuditLog.js
-import React, { useCallback, useEffect, useState } from "react";
+// web/src/AuditLog.tsx
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Flex,
@@ -545,7 +545,7 @@ function AuditLog({ runtime, ims }) {
   ] });
 }
 
-// web/src/index.js
+// web/src/index.tsx
 function registerAuditLog() {
   configureWeb({
     actionKeys: {
