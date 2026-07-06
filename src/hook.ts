@@ -97,4 +97,4 @@ async function recordAuditEntries (client, entries, logger) {
   }
 }
 
-module.exports = { recordAuditEntries, AUDIT_COLLECTION }
+export { recordAuditEntries, AUDIT_COLLECTION }
