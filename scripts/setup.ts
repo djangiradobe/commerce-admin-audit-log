@@ -177,20 +177,23 @@ function main () {
   // doesn't depend on postinstall ordering. Only create when a web-src/
   // shell actually exists (i.e. this is a UI host project).
   const webSrcDir = path.join(root, 'web-src', 'src')
-  const addons = path.join(webSrcDir, 'addons.js')
-  if (!fs.existsSync(addons)) {
+  // Prefer the TS addons file; fall back to a legacy .js; create .tsx if neither.
+  let addons = [path.join(webSrcDir, 'addons.tsx'), path.join(webSrcDir, 'addons.js')]
+    .find((p) => fs.existsSync(p))
+  if (!addons) {
     if (!fs.existsSync(path.join(root, 'web-src'))) {
       console.log(`[${PACKAGE_NAME}] no web-src/ — skip UI registration.`)
       return
     }
     fs.mkdirSync(webSrcDir, { recursive: true })
+    addons = path.join(webSrcDir, 'addons.tsx')
     fs.writeFileSync(addons, addonsScaffold(), 'utf8')
-    console.log(`[${PACKAGE_NAME}] web-src/src/addons.js: created`)
+    console.log(`[${PACKAGE_NAME}] web-src/src/addons.tsx: created`)
   }
   const before = fs.readFileSync(addons, 'utf8')
   const { content, changed, reason } = patchAddons(before)
   if (changed) fs.writeFileSync(addons, content, 'utf8')
-  console.log(`[${PACKAGE_NAME}] web-src/src/addons.js: ${reason}`)
+  console.log(`[${PACKAGE_NAME}] ${path.basename(addons)}: ${reason}`)
 }
 
 if (require.main === module) {
