@@ -45,6 +45,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@adobedjangir/abdb": "^1.0.0",
     "esbuild": "^0.25.0"
   },
   "devDependencies": {
